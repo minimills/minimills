@@ -1,0 +1,486 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  emailVerified    Boolean   @default(false)
+  name             String
+  username         String    @unique
+  passwordHash     String?
+  avatarUrl        String?
+  avatarKey        String?
+  bio              String?
+  twoFactorEnabled Boolean   @default(false)
+  twoFactorSecret  String?
+  backupCodes      String[]
+  notifyEmail      Boolean   @default(true)
+  notifyAssigned   Boolean   @default(true)
+  notifyMentioned  Boolean   @default(true)
+  notifyDueDates   Boolean   @default(true)
+  notifyComments   Boolean   @default(true)
+  lastSeenAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  workspaceMembers  WorkspaceMember[]
+  boardMembers      BoardMember[]
+  assignedCards     CardAssignee[]
+  comments          Comment[]
+  reactions         Reaction[]
+  activities        Activity[]
+  notifications     Notification[]
+  ownedWorkspaces   Workspace[]
+  createdCards      Card[]
+  tokens            Token[]
+  sessions          Session[]
+  starredBoards     StarredBoard[]
+  watchedCards      CardWatcher[]
+
+  @@index([email])
+  @@index([username])
+}
+
+model Workspace {
+  id          String              @id @default(cuid())
+  name        String
+  slug        String              @unique
+  description String?
+  logoUrl     String?
+  logoKey     String?
+  ownerId     String
+  owner       User                @relation(fields: [ownerId], references: [id])
+  visibility  WorkspaceVisibility @default(PRIVATE)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  members     WorkspaceMember[]
+  boards      Board[]
+  invitations WorkspaceInvitation[]
+
+  @@index([slug])
+  @@index([ownerId])
+}
+
+enum WorkspaceVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  OBSERVER
+}
+
+model WorkspaceInvitation {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        WorkspaceRole
+  token       String        @unique
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+
+  @@index([token])
+  @@index([email])
+}
+
+model Board {
+  id              String          @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  visibility      BoardVisibility @default(WORKSPACE)
+  backgroundUrl   String?
+  backgroundColor String?
+  isArchived      Boolean         @default(false)
+  isTemplate      Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lists           List[]
+  members         BoardMember[]
+  labels          Label[]
+  customFields    CustomField[]
+  activities      Activity[]
+  starredBy       StarredBoard[]
+  automationRules AutomationRule[]
+  emailIntegration EmailIntegration?
+
+  @@index([workspaceId])
+}
+
+enum BoardVisibility {
+  PRIVATE
+  WORKSPACE
+  PUBLIC
+}
+
+model BoardMember {
+  id      String    @id @default(cuid())
+  boardId String
+  board   Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role    BoardRole @default(MEMBER)
+
+  @@unique([boardId, userId])
+  @@index([boardId])
+  @@index([userId])
+}
+
+enum BoardRole {
+  ADMIN
+  MEMBER
+  OBSERVER
+}
+
+model StarredBoard {
+  id      String @id @default(cuid())
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+}
+
+model List {
+  id         String   @id @default(cuid())
+  boardId    String
+  board      Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name       String
+  position   Float
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  cards Card[]
+
+  @@index([boardId, position])
+}
+
+model Card {
+  id          String    @id @default(cuid())
+  listId      String
+  list        List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  title       String
+  description String?
+  position    Float
+  coverUrl    String?
+  coverKey    String?
+  coverColor  String?
+  priority    Priority  @default(NONE)
+  startDate   DateTime?
+  dueDate     DateTime?
+  isArchived  Boolean   @default(false)
+  isTemplate  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  assignees         CardAssignee[]
+  labels            CardLabel[]
+  attachments       Attachment[]
+  checklists        Checklist[]
+  comments          Comment[]
+  activities        Activity[]
+  customFieldValues CustomFieldValue[]
+  watchedBy         CardWatcher[]
+
+  @@index([listId, position])
+  @@index([dueDate])
+  @@index([createdById])
+}
+
+enum Priority {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model CardAssignee {
+  id     String @id @default(cuid())
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, userId])
+}
+
+model CardWatcher {
+  id     String @id @default(cuid())
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, userId])
+}
+
+model Label {
+  id      String      @id @default(cuid())
+  boardId String
+  board   Board       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name    String
+  color   String
+
+  cards CardLabel[]
+
+  @@index([boardId])
+}
+
+model CardLabel {
+  id      String @id @default(cuid())
+  cardId  String
+  card    Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  labelId String
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, labelId])
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  name      String
+  url       String
+  key       String
+  size      Int
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  @@index([cardId])
+}
+
+model Checklist {
+  id        String          @id @default(cuid())
+  cardId    String
+  card      Card            @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  name      String
+  position  Float
+  createdAt DateTime        @default(now())
+
+  items ChecklistItem[]
+
+  @@index([cardId])
+}
+
+model ChecklistItem {
+  id          String    @id @default(cuid())
+  checklistId String
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  title       String
+  isCompleted Boolean   @default(false)
+  position    Float
+  dueDate     DateTime?
+  assigneeId  String?
+
+  @@index([checklistId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  content   String
+  isEdited  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reactions Reaction[]
+
+  @@index([cardId])
+}
+
+model Reaction {
+  id        String  @id @default(cuid())
+  commentId String
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  emoji     String
+
+  @@unique([commentId, userId, emoji])
+}
+
+model CustomField {
+  id      String          @id @default(cuid())
+  boardId String
+  board   Board           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name    String
+  type    CustomFieldType
+  options Json?
+
+  values CustomFieldValue[]
+
+  @@index([boardId])
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  DROPDOWN
+  CHECKBOX
+  URL
+  MEMBER
+}
+
+model CustomFieldValue {
+  id            String      @id @default(cuid())
+  cardId        String
+  card          Card        @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  customFieldId String
+  customField   CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+  value         String?
+
+  @@unique([cardId, customFieldId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  boardId   String?
+  board     Board?   @relation(fields: [boardId], references: [id], onDelete: SetNull)
+  cardId    String?
+  card      Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@index([boardId])
+  @@index([cardId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+}
+
+enum NotificationType {
+  CARD_ASSIGNED
+  CARD_COMMENTED
+  CARD_MENTIONED
+  CARD_DUE_SOON
+  CARD_OVERDUE
+  BOARD_INVITED
+  WORKSPACE_INVITED
+}
+
+model Token {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  type      TokenType
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  REFRESH
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  userAgent    String?
+  ipAddress    String?
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+model AutomationRule {
+  id             String    @id @default(cuid())
+  boardId        String
+  board          Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  name           String
+  isEnabled      Boolean   @default(true)
+  trigger        Json
+  conditions     Json
+  actions        Json
+  executionCount Int       @default(0)
+  lastRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([boardId])
+}
+
+model EmailIntegration {
+  id           String   @id @default(cuid())
+  boardId      String   @unique
+  board        Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  emailAddress String   @unique
+  listId       String?
+  isEnabled    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  ipAddress  String?
+  userAgent  String?
+  data       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+}
